@@ -11,6 +11,7 @@ class SimpleGame
 	flags: Flags = new Flags();
 	spline: Spline;
 	multiSpline: MultiSpline;
+	multiSpline2: MultiSpline;
 
 	constructor()
 	{
@@ -47,49 +48,37 @@ class SimpleGame
 		this.bmd.addToWorld();
 
 		this.multiSpline = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
-		this.multiSpline.points = [
+		let points:Phaser.Point[] = [
 			new Phaser.Point(100,300),
 			new Phaser.Point(200,400),
 			new Phaser.Point(300,200),
 			new Phaser.Point(400,300),
 			new Phaser.Point(500,200),
 			new Phaser.Point(600,400),
+			new Phaser.Point(700,300),
+			new Phaser.Point(600,400),
 			new Phaser.Point(700,300)];
-		this.multiSpline.create();
+
+		this.multiSpline.create(points);
 		this.multiSpline.update();
 
-		// this.spline = new Spline(this.game, 'balls', this.bmd, this.flags);
-		// this.spline.points = [
-		// 	new Phaser.Point(100,300),
-		// 	new Phaser.Point(200,400),
-		// 	new Phaser.Point(300,200),
-		// 	new Phaser.Point(400,300)];
-		// this.spline.create();
-		// this.spline.update();
+		this.multiSpline2 = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
+		for(let p=0; p<points.length; ++p)
+		{
+			points[p].y += 200;
+		}
 
-		// this.splines[1] = new Spline(this.game, 'balls', this.bmd, this.flags);
-		// this.splines[1].points = [
-		// 	new Phaser.Point(600,400),
-		// 	new Phaser.Point(700,300),
-		// 	new Phaser.Point(500,200),
-		// 	new Phaser.Point(600,100)];
-
-		// for(var p=0; p<this.splines.length; p++) {
-		// 	this.splines[p].create();
-		// 	this.splines[p].update();
-		// }
+		this.multiSpline2.create(points);
+		this.multiSpline2.update();
 	}
 
 	update()
 	{
 		if(this.flags.updateNeeded) {
 			this.flags.updateNeeded = false;
-			this.bmd.clear();
+			this.bmd.cls();
 			this.multiSpline.update();
-			// this.spline.update();
-			// for(var p=0; p<this.splines.length; p++) {
-			// 	this.splines[p].update();
-			// }
+			this.multiSpline2.update();
   		}
 	}
 }

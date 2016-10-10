@@ -12,8 +12,8 @@ class MultiSpline
     spriteSheet:string;
     bmd:Phaser.BitmapData;
     flags:Flags;
-    points:Array<Phaser.Point> = new Array<Phaser.Point>(7);
-	sprites:Array<Phaser.Sprite> = new Array<Phaser.Sprite>(7);
+	sprites:Array<Phaser.Sprite> = new Array<Phaser.Sprite>();
+    private last_sprites_pos:Array<Phaser.Point> = new Array<Phaser.Point>();
 
 	constructor(game:Phaser.Game, spriteSheet:string, bmd:Phaser.BitmapData, flags:Flags)
 	{
@@ -21,18 +21,14 @@ class MultiSpline
         this.spriteSheet = spriteSheet;
         this.bmd = bmd;
         this.flags = flags;
-
-        let pt = new Phaser.Point(0,0);
-        for(let p=0; p<this.points.length; ++p) {
-            this.points[p] = pt;
-        }
     }
 	
-	create()
+	create(points: Array<Phaser.Point>)
 	{
-        for (let p = 0; p < this.sprites.length; p++)
+        for (let p = 0; p < points.length; p++)
         {
-            this.sprites[p] = this.game.add.sprite(this.points[p].x, this.points[p].y, this.spriteSheet, p%3);
+            this.sprites.push(this.game.add.sprite(points[p].x, points[p].y, this.spriteSheet, p%3));
+            this.last_sprites_pos.push(new Phaser.Point(points[p].x, points[p].y));
             this.sprites[p].anchor.set(0.5);
             this.sprites[p].inputEnabled = true;
             this.sprites[p].input.enableDrag(true);
@@ -46,26 +42,29 @@ class MultiSpline
 
     update()
     {
-        for (let k = 0; k < this.points.length - 3; k+=3) {
-            let x: number = 1 / this.game.width;
-            let x_pts: number[] = new Array<number>();
-            let y_pts: number[] = new Array<number>();
-
-            for (let i = k; i < k+4; i++) {
-                this.points[i].x = this.sprites[i].x;
-                this.points[i].y = this.sprites[i].y;
-                x_pts.push(this.points[i].x);
-                y_pts.push(this.points[i].y);
-            }
-
-            for (let p = 0; p <= 1; p += x)
-            {
-                let px = Phaser.Math.bezierInterpolation(x_pts, p);
-                let py = Phaser.Math.bezierInterpolation(y_pts, p);
-                this.bmd.rect(px, py, 1, 1, 'rgba(255, 255, 255, 1)');
-            }
+        this.bmd.ctx.fillStyle = '#00aa00';
+        this.bmd.ctx.beginPath();
+        this.bmd.ctx.moveTo(this.sprites[0].x, this.sprites[0].y);
+        for (let k = 0; k < this.sprites.length - 3; k+=3) {
+            this.bmd.ctx.bezierCurveTo(
+                this.sprites[k+1].x,
+                this.sprites[k+1].y,
+                this.sprites[k+2].x,
+                this.sprites[k+2].y,
+                this.sprites[k+3].x,
+                this.sprites[k+3].y
+            );
         }
-
+         this.bmd.ctx.bezierCurveTo(
+            this.sprites[this.sprites.length-2].x,
+            this.sprites[this.sprites.length-2].y,
+            this.sprites[this.sprites.length-1].x,
+            this.sprites[this.sprites.length-1].y,
+            this.sprites[0].x,
+            this.sprites[0].y
+            );
+        this.bmd.ctx.closePath();
+        this.bmd.ctx.fill();
     }
 
     onDrag(sprite: any) {
@@ -76,44 +75,52 @@ class MultiSpline
         let dy: number;
         switch(type) {
             case PointType.Start:
-                dx = this.sprites[pt].x - this.points[pt].x;
-                dy = this.sprites[pt].y - this.points[pt].y;
-                if (pt == 0) {
-                    this.sprites[pt+1].x += dx;
-                    this.sprites[pt+1].y += dy;
-                }
-                else if (pt == this.points.length - 1) {
-                    this.sprites[pt-1].x += dx;
-                    this.sprites[pt-1].y += dy;
-                }
-                else {
-                    this.sprites[pt-1].x += dx;
-                    this.sprites[pt-1].y += dy;
-                    this.sprites[pt+1].x += dx;
-                    this.sprites[pt+1].y += dy;
-                }
+                dx = this.sprites[pt].x - this.last_sprites_pos[pt].x;
+                dy = this.sprites[pt].y - this.last_sprites_pos[pt].y;
+
+                let prev_ctrl: Phaser.Sprite = this.getSpriteByIndex(pt-1);
+                let next_ctrl: Phaser.Sprite = this.getSpriteByIndex(pt+1);
+
+                prev_ctrl.x += dx;
+                prev_ctrl.y += dy;
+                next_ctrl.x += dx;
+                next_ctrl.y += dy;
             break;
             case PointType.StartControl:
-                if (pt != 1) {
-                    dx = this.sprites[pt].x - this.sprites[pt-1].x;
-                    dy = this.sprites[pt].y - this.sprites[pt-1].y;
-                    this.sprites[pt-2].x = this.sprites[pt-1].x - dx;
-                    this.sprites[pt-2].y = this.sprites[pt-1].y - dy;
-                }
+                prev_ctrl = this.getSpriteByIndex(pt-2);
+                let prev_point: Phaser.Sprite = this.getSpriteByIndex(pt-1);
+
+                dx = this.sprites[pt].x - prev_point.x;
+                dy = this.sprites[pt].y - prev_point.y;
+                prev_ctrl.x = prev_point.x - dx;
+                prev_ctrl.y = prev_point.y - dy;
             break;
             case PointType.EndControl:
-                if (pt != this.points.length - 2) {
-                    dx = this.sprites[pt].x - this.sprites[pt+1].x;
-                    dy = this.sprites[pt].y - this.sprites[pt+1].y;
-                    this.sprites[pt+2].x = this.sprites[pt+1].x - dx;
-                    this.sprites[pt+2].y = this.sprites[pt+1].y - dy;
-                }
+                next_ctrl = this.getSpriteByIndex(pt+2);
+                let next_point: Phaser.Sprite = this.getSpriteByIndex(pt+1);
+
+                dx = this.sprites[pt].x - next_point.x;
+                dy = this.sprites[pt].y - next_point.y;
+                next_ctrl.x = next_point.x - dx;
+                next_ctrl.y = next_point.y - dy;
             break;
         }
         for (let p = 0; p < this.sprites.length; p++)
         {
-            this.points[p].x = this.sprites[p].x;
-            this.points[p].y = this.sprites[p].y;
+            this.last_sprites_pos[p].x = this.sprites[p].x;
+            this.last_sprites_pos[p].y = this.sprites[p].y;
+        }
+    }
+
+    getSpriteByIndex(n: number): Phaser.Sprite
+    {
+        if(n < 0) 
+        {
+            return this.sprites[this.sprites.length + (n % -this.sprites.length)];
+        }
+        else 
+        {
+            return this.sprites[n % this.sprites.length];
         }
     }
 }

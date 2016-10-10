@@ -53,20 +53,17 @@ var PointType;
 })(PointType || (PointType = {}));
 var MultiSpline = (function () {
     function MultiSpline(game, spriteSheet, bmd, flags) {
-        this.points = new Array(7);
-        this.sprites = new Array(7);
+        this.sprites = new Array();
+        this.last_sprites_pos = new Array();
         this.game = game;
         this.spriteSheet = spriteSheet;
         this.bmd = bmd;
         this.flags = flags;
-        var pt = new Phaser.Point(0, 0);
-        for (var p = 0; p < this.points.length; ++p) {
-            this.points[p] = pt;
-        }
     }
-    MultiSpline.prototype.create = function () {
-        for (var p = 0; p < this.sprites.length; p++) {
-            this.sprites[p] = this.game.add.sprite(this.points[p].x, this.points[p].y, this.spriteSheet, p % 3);
+    MultiSpline.prototype.create = function (points) {
+        for (var p = 0; p < points.length; p++) {
+            this.sprites.push(this.game.add.sprite(points[p].x, points[p].y, this.spriteSheet, p % 3));
+            this.last_sprites_pos.push(new Phaser.Point(points[p].x, points[p].y));
             this.sprites[p].anchor.set(0.5);
             this.sprites[p].inputEnabled = true;
             this.sprites[p].input.enableDrag(true);
@@ -77,22 +74,15 @@ var MultiSpline = (function () {
         }
     };
     MultiSpline.prototype.update = function () {
-        for (var k = 0; k < this.points.length - 3; k += 3) {
-            var x = 1 / this.game.width;
-            var x_pts = new Array();
-            var y_pts = new Array();
-            for (var i = k; i < k + 4; i++) {
-                this.points[i].x = this.sprites[i].x;
-                this.points[i].y = this.sprites[i].y;
-                x_pts.push(this.points[i].x);
-                y_pts.push(this.points[i].y);
-            }
-            for (var p = 0; p <= 1; p += x) {
-                var px = Phaser.Math.bezierInterpolation(x_pts, p);
-                var py = Phaser.Math.bezierInterpolation(y_pts, p);
-                this.bmd.rect(px, py, 1, 1, 'rgba(255, 255, 255, 1)');
-            }
+        this.bmd.ctx.fillStyle = '#00aa00';
+        this.bmd.ctx.beginPath();
+        this.bmd.ctx.moveTo(this.sprites[0].x, this.sprites[0].y);
+        for (var k = 0; k < this.sprites.length - 3; k += 3) {
+            this.bmd.ctx.bezierCurveTo(this.sprites[k + 1].x, this.sprites[k + 1].y, this.sprites[k + 2].x, this.sprites[k + 2].y, this.sprites[k + 3].x, this.sprites[k + 3].y);
         }
+        this.bmd.ctx.bezierCurveTo(this.sprites[this.sprites.length - 2].x, this.sprites[this.sprites.length - 2].y, this.sprites[this.sprites.length - 1].x, this.sprites[this.sprites.length - 1].y, this.sprites[0].x, this.sprites[0].y);
+        this.bmd.ctx.closePath();
+        this.bmd.ctx.fill();
     };
     MultiSpline.prototype.onDrag = function (sprite) {
         this.flags.updateNeeded = true;
@@ -102,43 +92,43 @@ var MultiSpline = (function () {
         var dy;
         switch (type) {
             case PointType.Start:
-                dx = this.sprites[pt].x - this.points[pt].x;
-                dy = this.sprites[pt].y - this.points[pt].y;
-                if (pt == 0) {
-                    this.sprites[pt + 1].x += dx;
-                    this.sprites[pt + 1].y += dy;
-                }
-                else if (pt == this.points.length - 1) {
-                    this.sprites[pt - 1].x += dx;
-                    this.sprites[pt - 1].y += dy;
-                }
-                else {
-                    this.sprites[pt - 1].x += dx;
-                    this.sprites[pt - 1].y += dy;
-                    this.sprites[pt + 1].x += dx;
-                    this.sprites[pt + 1].y += dy;
-                }
+                dx = this.sprites[pt].x - this.last_sprites_pos[pt].x;
+                dy = this.sprites[pt].y - this.last_sprites_pos[pt].y;
+                var prev_ctrl = this.getSpriteByIndex(pt - 1);
+                var next_ctrl = this.getSpriteByIndex(pt + 1);
+                prev_ctrl.x += dx;
+                prev_ctrl.y += dy;
+                next_ctrl.x += dx;
+                next_ctrl.y += dy;
                 break;
             case PointType.StartControl:
-                if (pt != 1) {
-                    dx = this.sprites[pt].x - this.sprites[pt - 1].x;
-                    dy = this.sprites[pt].y - this.sprites[pt - 1].y;
-                    this.sprites[pt - 2].x = this.sprites[pt - 1].x - dx;
-                    this.sprites[pt - 2].y = this.sprites[pt - 1].y - dy;
-                }
+                prev_ctrl = this.getSpriteByIndex(pt - 2);
+                var prev_point = this.getSpriteByIndex(pt - 1);
+                dx = this.sprites[pt].x - prev_point.x;
+                dy = this.sprites[pt].y - prev_point.y;
+                prev_ctrl.x = prev_point.x - dx;
+                prev_ctrl.y = prev_point.y - dy;
                 break;
             case PointType.EndControl:
-                if (pt != this.points.length - 2) {
-                    dx = this.sprites[pt].x - this.sprites[pt + 1].x;
-                    dy = this.sprites[pt].y - this.sprites[pt + 1].y;
-                    this.sprites[pt + 2].x = this.sprites[pt + 1].x - dx;
-                    this.sprites[pt + 2].y = this.sprites[pt + 1].y - dy;
-                }
+                next_ctrl = this.getSpriteByIndex(pt + 2);
+                var next_point = this.getSpriteByIndex(pt + 1);
+                dx = this.sprites[pt].x - next_point.x;
+                dy = this.sprites[pt].y - next_point.y;
+                next_ctrl.x = next_point.x - dx;
+                next_ctrl.y = next_point.y - dy;
                 break;
         }
         for (var p = 0; p < this.sprites.length; p++) {
-            this.points[p].x = this.sprites[p].x;
-            this.points[p].y = this.sprites[p].y;
+            this.last_sprites_pos[p].x = this.sprites[p].x;
+            this.last_sprites_pos[p].y = this.sprites[p].y;
+        }
+    };
+    MultiSpline.prototype.getSpriteByIndex = function (n) {
+        if (n < 0) {
+            return this.sprites[this.sprites.length + (n % -this.sprites.length)];
+        }
+        else {
+            return this.sprites[n % this.sprites.length];
         }
     };
     return MultiSpline;
@@ -172,40 +162,31 @@ var SimpleGame = (function () {
         this.bmd = this.game.add.bitmapData(this.game.width, this.game.height);
         this.bmd.addToWorld();
         this.multiSpline = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
-        this.multiSpline.points = [
+        var points = [
             new Phaser.Point(100, 300),
             new Phaser.Point(200, 400),
             new Phaser.Point(300, 200),
             new Phaser.Point(400, 300),
             new Phaser.Point(500, 200),
             new Phaser.Point(600, 400),
+            new Phaser.Point(700, 300),
+            new Phaser.Point(600, 400),
             new Phaser.Point(700, 300)];
-        this.multiSpline.create();
+        this.multiSpline.create(points);
         this.multiSpline.update();
-        // this.spline = new Spline(this.game, 'balls', this.bmd, this.flags);
-        // this.spline.points = [
-        // 	new Phaser.Point(100,300),
-        // 	new Phaser.Point(200,400),
-        // 	new Phaser.Point(300,200),
-        // 	new Phaser.Point(400,300)];
-        // this.spline.create();
-        // this.spline.update();
-        // this.splines[1] = new Spline(this.game, 'balls', this.bmd, this.flags);
-        // this.splines[1].points = [
-        // 	new Phaser.Point(600,400),
-        // 	new Phaser.Point(700,300),
-        // 	new Phaser.Point(500,200),
-        // 	new Phaser.Point(600,100)];
-        // for(var p=0; p<this.splines.length; p++) {
-        // 	this.splines[p].create();
-        // 	this.splines[p].update();
-        // }
+        this.multiSpline2 = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
+        for (var p = 0; p < points.length; ++p) {
+            points[p].y += 200;
+        }
+        this.multiSpline2.create(points);
+        this.multiSpline2.update();
     };
     SimpleGame.prototype.update = function () {
         if (this.flags.updateNeeded) {
             this.flags.updateNeeded = false;
-            this.bmd.clear();
+            this.bmd.cls();
             this.multiSpline.update();
+            this.multiSpline2.update();
         }
     };
     return SimpleGame;
