@@ -1,9 +1,9 @@
 var Flags = (function () {
     function Flags() {
+        this.updateNeeded = true;
     }
     return Flags;
 }());
-/// <reference path="Definitions.ts" />
 var Spline = (function () {
     function Spline(game, spriteSheet, bmd, flags) {
         this.points = new Array(4);
@@ -44,7 +44,6 @@ var Spline = (function () {
     };
     return Spline;
 }());
-/// <reference path="Definitions.ts" />
 var PointType;
 (function (PointType) {
     PointType[PointType["Start"] = 0] = "Start";
@@ -59,6 +58,7 @@ var MultiSpline = (function () {
         this.spriteSheet = spriteSheet;
         this.bmd = bmd;
         this.flags = flags;
+        this.flags.updateNeeded = false;
     }
     MultiSpline.prototype.create = function (points) {
         for (var p = 0; p < points.length; p++) {
@@ -133,24 +133,117 @@ var MultiSpline = (function () {
     };
     return MultiSpline;
 }());
-/// <reference path="../../typescript/phaser.d.ts" />
-/// <reference path="Spline.ts" />
-/// <reference path="MultiSpline.ts" />
-/// <reference path="Definitions.ts" />
+var MultiSplineEditor = (function () {
+    function MultiSplineEditor(game, spriteSheet, bmd, flags) {
+        this._game = game;
+        this._spriteSheet = spriteSheet;
+        this._bmd = bmd;
+        this._flags = flags;
+        this._lines = new Array();
+        this._data = new Array();
+    }
+    MultiSplineEditor.prototype.start = function (onCompletion, context) {
+        this._game.input.onDown.add(this.onPointerDown, this);
+        this._game.input.addMoveCallback(this.pointerMoved, this);
+        this._callback = onCompletion.bind(context);
+    };
+    MultiSplineEditor.prototype.onPointerDown = function (pointer) {
+        if (this._tracing) {
+            var x = this._currentLine.end.x;
+            var y = this._currentLine.end.y;
+            var clone = new Phaser.Line(this._currentLine.start.x, this._currentLine.start.y, this._currentLine.end.x, this._currentLine.end.y);
+            this._lines.push(clone);
+            this._bmd.line(this._currentLine.start.x, this._currentLine.start.y, this._currentLine.end.x, this._currentLine.end.y, '#00ff00');
+            if (x === this._dropZone.x && y === this._dropZone.y) {
+                var lines = this._lines.slice(0);
+                this._data.push(lines);
+                this._lines = new Array();
+                this._currentLine = null;
+                this._tracing = false;
+                this.stop();
+            }
+            else {
+                this._currentLine = new Phaser.Line(x, y, pointer.x, pointer.y);
+            }
+        }
+        else {
+            this._currentLine = new Phaser.Line(pointer.x, pointer.y, pointer.x, pointer.y);
+            this._dropZone = new Phaser.Circle(pointer.x, pointer.y, 16);
+            this._tracing = true;
+        }
+    };
+    MultiSplineEditor.prototype.pointerMoved = function (pointer) {
+        if (this._currentLine) {
+            if (this._dropZone.contains(pointer.x, pointer.y) && this._lines.length > 1) {
+                this._currentLine.end.setTo(this._dropZone.x, this._dropZone.y);
+            }
+            else {
+                this._currentLine.end.setTo(pointer.x, pointer.y);
+            }
+        }
+    };
+    MultiSplineEditor.prototype.stop = function () {
+        this._game.input.onDown.remove(this.onPointerDown, this);
+        this._game.input.deleteMoveCallback(this.pointerMoved, this);
+        var path = this._data[this._data.length - 1];
+        var spline = new MultiSpline(this._game, this._spriteSheet, this._bmd, this._flags);
+        var points = new Array();
+        for (var i = 0; i < path.length; ++i) {
+            points.push(path[i].start);
+            var start_ctrl = Phaser.Point.interpolate(path[i].start, path[i].end, 0.2);
+            var end_ctrl = Phaser.Point.interpolate(path[i].start, path[i].end, 0.8);
+            var angle = Phaser.Point.angle(path[i].start, path[i].end);
+            var rot = void 0;
+            if (angle > 0) {
+                rot = 30;
+            }
+            else {
+                rot = -30;
+            }
+            points.push(start_ctrl);
+            points.push(end_ctrl);
+            console.log('Angle:', Phaser.Point.angle(path[i].start, path[i].end));
+        }
+        spline.create(points);
+        spline.flags.updateNeeded = true;
+        this._callback(spline);
+    };
+    MultiSplineEditor.prototype.redraw = function () {
+        this._bmd.cls();
+        this._bmd.ctx.fillStyle = '#00aa00';
+        for (var i = 0; i < this._data.length; i++) {
+            var path = this._data[i];
+            this._bmd.ctx.beginPath();
+            this._bmd.ctx.moveTo(path[0].start.x, path[0].start.y);
+            for (var n = 0; n < path.length; n++) {
+                this._bmd.ctx.lineTo(path[n].end.x, path[n].end.y);
+            }
+            this._bmd.ctx.closePath();
+            this._bmd.ctx.fill();
+        }
+    };
+    MultiSplineEditor.prototype.render = function () {
+        if (this._currentLine) {
+            if (this._dropZone.contains(this._currentLine.end.x, this._currentLine.end.y)) {
+                this._game.debug.geom(this._currentLine, '#ffff00');
+            }
+            else {
+                this._game.debug.geom(this._currentLine, '#00ff00');
+            }
+        }
+    };
+    return MultiSplineEditor;
+}());
 var SimpleGame = (function () {
     function SimpleGame() {
         this.flags = new Flags();
-        // create our phaser game
-        // 800 - width
-        // 600 - height
-        // Phaser.AUTO - determine the renderer automatically (canvas, webgl)
-        // 'content' - the name of the container to add our game to
-        // { preload:this.preload, create:this.create} - functions to call for our states
-        this.game = new Phaser.Game(800, 600, Phaser.AUTO, 'spline-content', {
+        this.game = new Phaser.Game(800, 600, Phaser.CANVAS, 'spline-content', {
             preload: this.preload,
             create: this.create,
-            update: this.update });
-        // this.splines = new Array<Spline>();
+            update: this.update,
+            render: this.render,
+            splineCreated: this.splineCreated
+        });
     }
     SimpleGame.prototype.preload = function () {
         this.game.load.spritesheet('balls', 'assets/balls.png', 17, 17);
@@ -159,39 +252,30 @@ var SimpleGame = (function () {
         this.flags = new Flags();
         this.flags.updateNeeded = true;
         this.game.stage.backgroundColor = '#204090';
-        this.bmd = this.game.add.bitmapData(this.game.width, this.game.height);
+        this.bmd = this.game.make.bitmapData(this.game.width, this.game.height);
         this.bmd.addToWorld();
-        this.multiSpline = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
-        var points = [
-            new Phaser.Point(100, 300),
-            new Phaser.Point(200, 400),
-            new Phaser.Point(300, 200),
-            new Phaser.Point(400, 300),
-            new Phaser.Point(500, 200),
-            new Phaser.Point(600, 400),
-            new Phaser.Point(700, 300),
-            new Phaser.Point(600, 400),
-            new Phaser.Point(700, 300)];
-        this.multiSpline.create(points);
-        this.multiSpline.update();
-        this.multiSpline2 = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
-        for (var p = 0; p < points.length; ++p) {
-            points[p].y += 200;
-        }
-        this.multiSpline2.create(points);
-        this.multiSpline2.update();
+        this.multiSplineEditor = new MultiSplineEditor(this.game, 'balls', this.bmd, this.flags);
+        this.multiSplineEditor.start(this.splineCreated, this);
     };
     SimpleGame.prototype.update = function () {
         if (this.flags.updateNeeded) {
             this.flags.updateNeeded = false;
             this.bmd.cls();
-            this.multiSpline.update();
-            this.multiSpline2.update();
+            if (this.multiSpline != undefined) {
+                this.multiSpline.update();
+            }
         }
+    };
+    SimpleGame.prototype.render = function () {
+        this.multiSplineEditor.render();
+    };
+    SimpleGame.prototype.splineCreated = function (spline) {
+        this.multiSpline = spline;
+        this.bmd.cls();
+        this.multiSpline.update();
     };
     return SimpleGame;
 }());
-// when the page has finished loading, create our game
 window.onload = function () {
     var game = new SimpleGame();
 };

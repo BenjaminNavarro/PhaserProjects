@@ -2,6 +2,9 @@
 	"compilerOptions": {
 		"target": "ES5",
 		"module": "amd",
-		"sourceMap": false
-	}
+		"sourceMap": false,
+		"outFile": "../docs/js/game.js"
+	},
+	"compileOnSave": true,
+	"buildOnSave": true
 }

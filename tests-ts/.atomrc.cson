@@ -1,0 +1,4 @@
+"*":
+  "autocomplete-plus":
+    defaultProvider: "Fuzzy"
+    enableAutoActivation: true
