@@ -1,6 +1,5 @@
 /// <reference path="../../typescript/phaser.d.ts" />
 /// <reference path="Definitions.ts" />
-/// <reference path="Spline.ts" />
 /// <reference path="MultiSpline.ts" />
 /// <reference path="MultiSplineEditor.ts"/>
 
@@ -11,8 +10,11 @@ class SimpleGame {
     flags: Flags = new Flags();
     spline: Spline;
     multiSpline: MultiSpline;
-    multiSpline2: MultiSpline;
     multiSplineEditor: MultiSplineEditor;
+    waterSprite: Phaser.Sprite;
+    sandSprite: Phaser.Sprite;
+    islandSprite: Phaser.Sprite;
+    islandMask: Phaser.Graphics;
 
     constructor() {
         // create our phaser game
@@ -32,57 +34,39 @@ class SimpleGame {
                 render: this.render,
                 splineCreated: this.splineCreated
             });
-        // this.splines = new Array<Spline>();
     }
 
     preload() {
         this.game.load.spritesheet('balls', 'assets/balls.png', 17, 17);
+        this.game.load.image('water', 'assets/BigWater.png');
+        this.game.load.image('sand', 'assets/light_sand_template.jpg');
     }
 
     create() {
+        this.waterSprite = this.game.add.sprite(0, 0, 'water');
+
         this.flags = new Flags();
         this.flags.updateNeeded = true;
 
-        this.game.stage.backgroundColor = '#204090';
+        this.islandMask = this.game.add.graphics(0, 0);
+        this.islandMask.clear();
+
+        this.sandSprite = this.game.add.sprite(0, 0, 'sand');
+        this.sandSprite.mask = this.islandMask;
 
         this.bmd = this.game.make.bitmapData(this.game.width, this.game.height);
         this.bmd.addToWorld();
 
-        this.multiSplineEditor = new MultiSplineEditor(this.game, 'balls', this.bmd, this.flags);
+        this.multiSplineEditor = new MultiSplineEditor(this.game, this.bmd, this.islandMask, 'balls', this.flags);
         this.multiSplineEditor.start(this.splineCreated, this);
-
-        // this.multiSpline = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
-        // let points: Phaser.Point[] = [
-        //     new Phaser.Point(100, 300),
-        //     new Phaser.Point(200, 400),
-        //     new Phaser.Point(300, 200),
-        //     new Phaser.Point(400, 300),
-        //     new Phaser.Point(500, 200),
-        //     new Phaser.Point(600, 400),
-        //     new Phaser.Point(700, 300),
-        //     new Phaser.Point(600, 400),
-        //     new Phaser.Point(700, 300)];
-        //
-        // this.multiSpline.create(points);
-        // this.multiSpline.update();
-        //
-        // this.multiSpline2 = new MultiSpline(this.game, 'balls', this.bmd, this.flags);
-        // for (let p = 0; p < points.length; ++p) {
-        //     points[p].y += 200;
-        // }
-        //
-        // this.multiSpline2.create(points);
-        // this.multiSpline2.update();
     }
 
     update() {
         if (this.flags.updateNeeded) {
             this.flags.updateNeeded = false;
-            this.bmd.cls();
             if (this.multiSpline != undefined) {
                 this.multiSpline.update();
             }
-            // this.multiSpline2.update();
         }
     }
 
@@ -91,8 +75,8 @@ class SimpleGame {
     }
 
     splineCreated(spline: MultiSpline) {
-        this.multiSpline = spline;
         this.bmd.cls();
+        this.multiSpline = spline;
         this.multiSpline.update();
     }
 }

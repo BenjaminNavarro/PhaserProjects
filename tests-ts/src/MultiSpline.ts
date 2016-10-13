@@ -7,15 +7,15 @@ enum PointType {
 class MultiSpline {
     game: Phaser.Game;
     spriteSheet: string;
-    bmd: Phaser.BitmapData;
+    mask: Phaser.Graphics;
     flags: Flags;
     sprites: Array<Phaser.Sprite> = new Array<Phaser.Sprite>();
     private last_sprites_pos: Array<Phaser.Point> = new Array<Phaser.Point>();
 
-    constructor(game: Phaser.Game, spriteSheet: string, bmd: Phaser.BitmapData, flags: Flags) {
+    constructor(game: Phaser.Game, mask: Phaser.Graphics, spriteSheet: string, flags: Flags) {
         this.game = game;
+        this.mask = mask;
         this.spriteSheet = spriteSheet;
-        this.bmd = bmd;
         this.flags = flags;
         this.flags.updateNeeded = false;
     }
@@ -35,11 +35,11 @@ class MultiSpline {
     }
 
     update() {
-        this.bmd.ctx.fillStyle = '#00aa00';
-        this.bmd.ctx.beginPath();
-        this.bmd.ctx.moveTo(this.sprites[0].x, this.sprites[0].y);
+        this.mask.clear();
+        this.mask.beginFill(0xffffff);
+        this.mask.moveTo(this.sprites[0].x, this.sprites[0].y);
         for (let k = 0; k < this.sprites.length - 3; k += 3) {
-            this.bmd.ctx.bezierCurveTo(
+            this.mask.bezierCurveTo(
                 this.sprites[k + 1].x,
                 this.sprites[k + 1].y,
                 this.sprites[k + 2].x,
@@ -48,7 +48,7 @@ class MultiSpline {
                 this.sprites[k + 3].y
             );
         }
-        this.bmd.ctx.bezierCurveTo(
+        this.mask.bezierCurveTo(
             this.sprites[this.sprites.length - 2].x,
             this.sprites[this.sprites.length - 2].y,
             this.sprites[this.sprites.length - 1].x,
@@ -56,8 +56,7 @@ class MultiSpline {
             this.sprites[0].x,
             this.sprites[0].y
         );
-        this.bmd.ctx.closePath();
-        this.bmd.ctx.fill();
+        this.mask.endFill();
     }
 
     onDrag(sprite: any) {

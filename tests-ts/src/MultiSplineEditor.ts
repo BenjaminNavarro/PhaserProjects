@@ -1,8 +1,9 @@
 
 class MultiSplineEditor {
     private _game: Phaser.Game;
-    private _spriteSheet: string;
     private _bmd: Phaser.BitmapData;
+    private _mask: Phaser.Graphics;
+    private _spriteSheet: string;
     private _flags: Flags;
     private _onCompletionCallback: () => MultiSpline;
     private _lines: Array<Phaser.Line>;
@@ -12,10 +13,11 @@ class MultiSplineEditor {
     private _tracing: boolean;
     private _callback: (MultiSpline) => void;
 
-    constructor(game: Phaser.Game, spriteSheet: string, bmd: Phaser.BitmapData, flags: Flags) {
+    constructor(game: Phaser.Game, bmd: Phaser.BitmapData, mask: Phaser.Graphics, spriteSheet: string, flags: Flags) {
         this._game = game;
-        this._spriteSheet = spriteSheet;
         this._bmd = bmd;
+        this._mask = mask;
+        this._spriteSheet = spriteSheet;
         this._flags = flags;
 
         this._lines = new Array<Phaser.Line>();
@@ -46,7 +48,6 @@ class MultiSplineEditor {
                 this._lines = new Array<Phaser.Line>();
                 this._currentLine = null;
                 this._tracing = false;
-                // this.redraw();
                 this.stop();
             }
             else {
@@ -77,51 +78,21 @@ class MultiSplineEditor {
 
         let path: Array<Phaser.Line> = this._data[this._data.length - 1];
 
-        let spline: MultiSpline = new MultiSpline(this._game, this._spriteSheet, this._bmd, this._flags);
+        let spline: MultiSpline = new MultiSpline(this._game, this._mask, this._spriteSheet, this._flags);
         let points: Array<Phaser.Point> = new Array<Phaser.Point>();
         for (let i = 0; i < path.length; ++i) {
             points.push(path[i].start); // passing point
             let start_ctrl = Phaser.Point.interpolate(path[i].start, path[i].end, 0.2);
             let end_ctrl = Phaser.Point.interpolate(path[i].start, path[i].end, 0.8);
-            let angle = Phaser.Point.angle(path[i].start, path[i].end);
-            let rot: number;
-            if (angle > 0) {
-                rot = 30;
-            }
-            else {
-                rot = -30;
-            }
             // points.push(start_ctrl.rotate(path[i].start.x, path[i].start.y, rot, true)); // First control point
             points.push(start_ctrl); // First control point
             points.push(end_ctrl); // Second control point
-            console.log('Angle:', Phaser.Point.angle(path[i].start, path[i].end));
         }
         spline.create(points);
         spline.flags.updateNeeded = true;
         this._callback(spline);
     }
 
-    redraw() {
-        this._bmd.cls();
-        this._bmd.ctx.fillStyle = '#00aa00';
-
-        for (var i = 0; i < this._data.length; i++) {
-            let path: Array<Phaser.Line> = this._data[i];
-
-            this._bmd.ctx.beginPath();
-
-            this._bmd.ctx.moveTo(path[0].start.x, path[0].start.y);
-
-            for (var n = 0; n < path.length; n++) {
-                this._bmd.ctx.lineTo(path[n].end.x, path[n].end.y);
-            }
-
-            this._bmd.ctx.closePath();
-
-            this._bmd.ctx.fill();
-        }
-
-    }
 
     render() {
         if (this._currentLine) {

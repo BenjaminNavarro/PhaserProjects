@@ -4,46 +4,6 @@ var Flags = (function () {
     }
     return Flags;
 }());
-var Spline = (function () {
-    function Spline(game, spriteSheet, bmd, flags) {
-        this.points = new Array(4);
-        this.sprites = new Array(4);
-        this.game = game;
-        this.spriteSheet = spriteSheet;
-        this.bmd = bmd;
-        this.flags = flags;
-        var pt = new Phaser.Point(0, 0);
-        for (var p = 0; p < 4; ++p) {
-            this.points[p] = pt;
-        }
-    }
-    Spline.prototype.create = function () {
-        for (var p = 0; p < this.points.length; p++) {
-            this.sprites[p] = this.game.add.sprite(this.points[p].x, this.points[p].y, this.spriteSheet, p);
-            this.sprites[p].anchor.set(0.5);
-            this.sprites[p].inputEnabled = true;
-            this.sprites[p].input.enableDrag(true);
-            this.sprites[p].events.onDragUpdate.add(function () { this.flags.updateNeeded = true; }, this);
-        }
-    };
-    Spline.prototype.update = function () {
-        var x = 1 / this.game.width;
-        var x_pts = new Array();
-        var y_pts = new Array();
-        for (var i = 0; i < this.points.length; i++) {
-            this.points[i].x = this.sprites[i].x;
-            this.points[i].y = this.sprites[i].y;
-            x_pts.push(this.points[i].x);
-            y_pts.push(this.points[i].y);
-        }
-        for (var i = 0; i <= 1; i += x) {
-            var px = Phaser.Math.bezierInterpolation(x_pts, i);
-            var py = Phaser.Math.bezierInterpolation(y_pts, i);
-            this.bmd.rect(px, py, 1, 1, 'rgba(255, 255, 255, 1)');
-        }
-    };
-    return Spline;
-}());
 var PointType;
 (function (PointType) {
     PointType[PointType["Start"] = 0] = "Start";
@@ -51,12 +11,12 @@ var PointType;
     PointType[PointType["EndControl"] = 2] = "EndControl";
 })(PointType || (PointType = {}));
 var MultiSpline = (function () {
-    function MultiSpline(game, spriteSheet, bmd, flags) {
+    function MultiSpline(game, mask, spriteSheet, flags) {
         this.sprites = new Array();
         this.last_sprites_pos = new Array();
         this.game = game;
+        this.mask = mask;
         this.spriteSheet = spriteSheet;
-        this.bmd = bmd;
         this.flags = flags;
         this.flags.updateNeeded = false;
     }
@@ -74,15 +34,14 @@ var MultiSpline = (function () {
         }
     };
     MultiSpline.prototype.update = function () {
-        this.bmd.ctx.fillStyle = '#00aa00';
-        this.bmd.ctx.beginPath();
-        this.bmd.ctx.moveTo(this.sprites[0].x, this.sprites[0].y);
+        this.mask.clear();
+        this.mask.beginFill(0xffffff);
+        this.mask.moveTo(this.sprites[0].x, this.sprites[0].y);
         for (var k = 0; k < this.sprites.length - 3; k += 3) {
-            this.bmd.ctx.bezierCurveTo(this.sprites[k + 1].x, this.sprites[k + 1].y, this.sprites[k + 2].x, this.sprites[k + 2].y, this.sprites[k + 3].x, this.sprites[k + 3].y);
+            this.mask.bezierCurveTo(this.sprites[k + 1].x, this.sprites[k + 1].y, this.sprites[k + 2].x, this.sprites[k + 2].y, this.sprites[k + 3].x, this.sprites[k + 3].y);
         }
-        this.bmd.ctx.bezierCurveTo(this.sprites[this.sprites.length - 2].x, this.sprites[this.sprites.length - 2].y, this.sprites[this.sprites.length - 1].x, this.sprites[this.sprites.length - 1].y, this.sprites[0].x, this.sprites[0].y);
-        this.bmd.ctx.closePath();
-        this.bmd.ctx.fill();
+        this.mask.bezierCurveTo(this.sprites[this.sprites.length - 2].x, this.sprites[this.sprites.length - 2].y, this.sprites[this.sprites.length - 1].x, this.sprites[this.sprites.length - 1].y, this.sprites[0].x, this.sprites[0].y);
+        this.mask.endFill();
     };
     MultiSpline.prototype.onDrag = function (sprite) {
         this.flags.updateNeeded = true;
@@ -134,10 +93,11 @@ var MultiSpline = (function () {
     return MultiSpline;
 }());
 var MultiSplineEditor = (function () {
-    function MultiSplineEditor(game, spriteSheet, bmd, flags) {
+    function MultiSplineEditor(game, bmd, mask, spriteSheet, flags) {
         this._game = game;
-        this._spriteSheet = spriteSheet;
         this._bmd = bmd;
+        this._mask = mask;
+        this._spriteSheet = spriteSheet;
         this._flags = flags;
         this._lines = new Array();
         this._data = new Array();
@@ -186,41 +146,18 @@ var MultiSplineEditor = (function () {
         this._game.input.onDown.remove(this.onPointerDown, this);
         this._game.input.deleteMoveCallback(this.pointerMoved, this);
         var path = this._data[this._data.length - 1];
-        var spline = new MultiSpline(this._game, this._spriteSheet, this._bmd, this._flags);
+        var spline = new MultiSpline(this._game, this._mask, this._spriteSheet, this._flags);
         var points = new Array();
         for (var i = 0; i < path.length; ++i) {
             points.push(path[i].start);
             var start_ctrl = Phaser.Point.interpolate(path[i].start, path[i].end, 0.2);
             var end_ctrl = Phaser.Point.interpolate(path[i].start, path[i].end, 0.8);
-            var angle = Phaser.Point.angle(path[i].start, path[i].end);
-            var rot = void 0;
-            if (angle > 0) {
-                rot = 30;
-            }
-            else {
-                rot = -30;
-            }
             points.push(start_ctrl);
             points.push(end_ctrl);
-            console.log('Angle:', Phaser.Point.angle(path[i].start, path[i].end));
         }
         spline.create(points);
         spline.flags.updateNeeded = true;
         this._callback(spline);
-    };
-    MultiSplineEditor.prototype.redraw = function () {
-        this._bmd.cls();
-        this._bmd.ctx.fillStyle = '#00aa00';
-        for (var i = 0; i < this._data.length; i++) {
-            var path = this._data[i];
-            this._bmd.ctx.beginPath();
-            this._bmd.ctx.moveTo(path[0].start.x, path[0].start.y);
-            for (var n = 0; n < path.length; n++) {
-                this._bmd.ctx.lineTo(path[n].end.x, path[n].end.y);
-            }
-            this._bmd.ctx.closePath();
-            this._bmd.ctx.fill();
-        }
     };
     MultiSplineEditor.prototype.render = function () {
         if (this._currentLine) {
@@ -247,20 +184,25 @@ var SimpleGame = (function () {
     }
     SimpleGame.prototype.preload = function () {
         this.game.load.spritesheet('balls', 'assets/balls.png', 17, 17);
+        this.game.load.image('water', 'assets/BigWater.png');
+        this.game.load.image('sand', 'assets/light_sand_template.jpg');
     };
     SimpleGame.prototype.create = function () {
+        this.waterSprite = this.game.add.sprite(0, 0, 'water');
         this.flags = new Flags();
         this.flags.updateNeeded = true;
-        this.game.stage.backgroundColor = '#204090';
+        this.islandMask = this.game.add.graphics(0, 0);
+        this.islandMask.clear();
+        this.sandSprite = this.game.add.sprite(0, 0, 'sand');
+        this.sandSprite.mask = this.islandMask;
         this.bmd = this.game.make.bitmapData(this.game.width, this.game.height);
         this.bmd.addToWorld();
-        this.multiSplineEditor = new MultiSplineEditor(this.game, 'balls', this.bmd, this.flags);
+        this.multiSplineEditor = new MultiSplineEditor(this.game, this.bmd, this.islandMask, 'balls', this.flags);
         this.multiSplineEditor.start(this.splineCreated, this);
     };
     SimpleGame.prototype.update = function () {
         if (this.flags.updateNeeded) {
             this.flags.updateNeeded = false;
-            this.bmd.cls();
             if (this.multiSpline != undefined) {
                 this.multiSpline.update();
             }
@@ -270,8 +212,8 @@ var SimpleGame = (function () {
         this.multiSplineEditor.render();
     };
     SimpleGame.prototype.splineCreated = function (spline) {
-        this.multiSpline = spline;
         this.bmd.cls();
+        this.multiSpline = spline;
         this.multiSpline.update();
     };
     return SimpleGame;
@@ -279,3 +221,43 @@ var SimpleGame = (function () {
 window.onload = function () {
     var game = new SimpleGame();
 };
+var Spline = (function () {
+    function Spline(game, spriteSheet, bmd, flags) {
+        this.points = new Array(4);
+        this.sprites = new Array(4);
+        this.game = game;
+        this.spriteSheet = spriteSheet;
+        this.bmd = bmd;
+        this.flags = flags;
+        var pt = new Phaser.Point(0, 0);
+        for (var p = 0; p < 4; ++p) {
+            this.points[p] = pt;
+        }
+    }
+    Spline.prototype.create = function () {
+        for (var p = 0; p < this.points.length; p++) {
+            this.sprites[p] = this.game.add.sprite(this.points[p].x, this.points[p].y, this.spriteSheet, p);
+            this.sprites[p].anchor.set(0.5);
+            this.sprites[p].inputEnabled = true;
+            this.sprites[p].input.enableDrag(true);
+            this.sprites[p].events.onDragUpdate.add(function () { this.flags.updateNeeded = true; }, this);
+        }
+    };
+    Spline.prototype.update = function () {
+        var x = 1 / this.game.width;
+        var x_pts = new Array();
+        var y_pts = new Array();
+        for (var i = 0; i < this.points.length; i++) {
+            this.points[i].x = this.sprites[i].x;
+            this.points[i].y = this.sprites[i].y;
+            x_pts.push(this.points[i].x);
+            y_pts.push(this.points[i].y);
+        }
+        for (var i = 0; i <= 1; i += x) {
+            var px = Phaser.Math.bezierInterpolation(x_pts, i);
+            var py = Phaser.Math.bezierInterpolation(y_pts, i);
+            this.bmd.rect(px, py, 1, 1, 'rgba(255, 255, 255, 1)');
+        }
+    };
+    return Spline;
+}());
