@@ -3,7 +3,7 @@
 		"target": "ES5",
 		"module": "amd",
 		"sourceMap": false,
-		"outFile": "../docs/js/game.js"
+		"outFile": "../../docs/js/game.js"
 	},
 	"compileOnSave": true,
 	"buildOnSave": true

@@ -6,109 +6,131 @@ enum PointType {
 
 class MultiSpline {
     game: Phaser.Game;
-    spriteSheet: string;
     mask: Phaser.Graphics;
-    flags: Flags;
-    sprites: Array<Phaser.Sprite> = new Array<Phaser.Sprite>();
-    private last_sprites_pos: Array<Phaser.Point> = new Array<Phaser.Point>();
+    area: Phaser.Graphics;
+    points: Array<Phaser.Point>;
 
-    constructor(game: Phaser.Game, mask: Phaser.Graphics, spriteSheet: string, flags: Flags) {
+    constructor(game: Phaser.Game, area: Phaser.Graphics, mask: Phaser.Graphics) {
         this.game = game;
         this.mask = mask;
-        this.spriteSheet = spriteSheet;
-        this.flags = flags;
-        this.flags.updateNeeded = false;
+        this.area = area;
     }
 
     create(points: Array<Phaser.Point>) {
-        for (let p = 0; p < points.length; p++) {
-            this.sprites.push(this.game.add.sprite(points[p].x, points[p].y, this.spriteSheet, p % 3));
-            this.last_sprites_pos.push(new Phaser.Point(points[p].x, points[p].y));
-            this.sprites[p].anchor.set(0.5);
-            this.sprites[p].inputEnabled = true;
-            this.sprites[p].input.enableDrag(true);
-            this.sprites[p].events.onDragUpdate.add(this.onDrag, this);
+        this.points = points;
+    }
+
+    createFromString(data: string) {
+        let [x, y] = JSON.parse(data);
+        let points: Array<Phaser.Point> = new Array<Phaser.Point>();
+        for (let i = 0; i < x.length; ++i) {
+            points.push(new Phaser.Point(x[i], y[i]));
         }
-        for (let p = 0; p < this.sprites.length; p++) {
-            this.onDrag(this.sprites[p]);
-        }
+        this.create(points);
     }
 
     update() {
-        this.mask.clear();
-        this.mask.beginFill(0xffffff);
-        this.mask.moveTo(this.sprites[0].x, this.sprites[0].y);
-        for (let k = 0; k < this.sprites.length - 3; k += 3) {
+        if (this.points != undefined) {
+            this.mask.clear();
+            this.mask.beginFill(0xffffff);
+            this.mask.drawRect(-1, -1, 1, 1);
+            this.mask.drawRect(-1, this.game.height, 1, 1);
+            this.mask.drawRect(this.game.width, -1, 1, 1);
+            this.mask.drawRect(this.game.width, this.game.height, 1, 1);
+            this.mask.moveTo(this.points[0].x, this.points[0].y);
+            for (let k = 0; k < this.points.length - 3; k += 3) {
+                this.mask.bezierCurveTo(
+                    this.points[k + 1].x,
+                    this.points[k + 1].y,
+                    this.points[k + 2].x,
+                    this.points[k + 2].y,
+                    this.points[k + 3].x,
+                    this.points[k + 3].y
+                );
+            }
             this.mask.bezierCurveTo(
-                this.sprites[k + 1].x,
-                this.sprites[k + 1].y,
-                this.sprites[k + 2].x,
-                this.sprites[k + 2].y,
-                this.sprites[k + 3].x,
-                this.sprites[k + 3].y
+                this.points[this.points.length - 2].x,
+                this.points[this.points.length - 2].y,
+                this.points[this.points.length - 1].x,
+                this.points[this.points.length - 1].y,
+                this.points[0].x,
+                this.points[0].y
             );
-        }
-        this.mask.bezierCurveTo(
-            this.sprites[this.sprites.length - 2].x,
-            this.sprites[this.sprites.length - 2].y,
-            this.sprites[this.sprites.length - 1].x,
-            this.sprites[this.sprites.length - 1].y,
-            this.sprites[0].x,
-            this.sprites[0].y
-        );
-        this.mask.endFill();
-    }
-
-    onDrag(sprite: any) {
-        this.flags.updateNeeded = true;
-        let pt = this.sprites.indexOf(sprite);
-        let type: PointType = pt % 3;
-        let dx: number;
-        let dy: number;
-        switch (type) {
-            case PointType.Start:
-                dx = this.sprites[pt].x - this.last_sprites_pos[pt].x;
-                dy = this.sprites[pt].y - this.last_sprites_pos[pt].y;
-
-                let prev_ctrl: Phaser.Sprite = this.getSpriteByIndex(pt - 1);
-                let next_ctrl: Phaser.Sprite = this.getSpriteByIndex(pt + 1);
-
-                prev_ctrl.x += dx;
-                prev_ctrl.y += dy;
-                next_ctrl.x += dx;
-                next_ctrl.y += dy;
-                break;
-            case PointType.StartControl:
-                prev_ctrl = this.getSpriteByIndex(pt - 2);
-                let prev_point: Phaser.Sprite = this.getSpriteByIndex(pt - 1);
-
-                dx = this.sprites[pt].x - prev_point.x;
-                dy = this.sprites[pt].y - prev_point.y;
-                prev_ctrl.x = prev_point.x - dx;
-                prev_ctrl.y = prev_point.y - dy;
-                break;
-            case PointType.EndControl:
-                next_ctrl = this.getSpriteByIndex(pt + 2);
-                let next_point: Phaser.Sprite = this.getSpriteByIndex(pt + 1);
-
-                dx = this.sprites[pt].x - next_point.x;
-                dy = this.sprites[pt].y - next_point.y;
-                next_ctrl.x = next_point.x - dx;
-                next_ctrl.y = next_point.y - dy;
-                break;
-        }
-        for (let p = 0; p < this.sprites.length; p++) {
-            this.last_sprites_pos[p].x = this.sprites[p].x;
-            this.last_sprites_pos[p].y = this.sprites[p].y;
+            this.mask.endFill();
         }
     }
 
-    getSpriteByIndex(n: number): Phaser.Sprite {
-        if (n < 0) {
-            return this.sprites[this.sprites.length + (n % -this.sprites.length)];
+    getDerivative(segment: number, t: number): Phaser.Point {
+        let tangent: Phaser.Point = new Phaser.Point();
+        if (t < 0 || t > 1) {
+            return tangent;
         }
-        else {
-            return this.sprites[n % this.sprites.length];
+
+        // Check if segment exists
+        let start_idx: number = Math.floor(segment) * 3;
+        if (start_idx > this.points.length - 1) {
+            return tangent;
         }
+
+        let p0 = this.points[start_idx];
+        let p1 = this.points[start_idx + 1];
+        let p2 = this.points[start_idx + 2];
+        let p3 = this.points[(start_idx + 3) % this.points.length];
+
+        //  dP(t) / dt = -3*P0*(1 - t)^2 +
+        // P1*(3*(1 - t)^2 - 6*(1 - t)*t) +
+        // P2*(6*(1 - t)*t - 3*t^2) +
+        // 3*P3*t^2
+
+        tangent.x = - p0.x * 3 * Math.pow(1 - t, 2)
+            + p1.x * (3 * Math.pow(1 - t, 2) - 6 * (1 - t) * t)
+            + p2.x * (6 * (1 - t) * t - 3 * t * t)
+            + p3.x * 3 * t * t;
+
+        tangent.y = - p0.y * 3 * Math.pow(1 - t, 2)
+            + p1.y * (3 * Math.pow(1 - t, 2) - 6 * (1 - t) * t)
+            + p2.y * (6 * (1 - t) * t - 3 * t * t)
+            + p3.y * 3 * t * t;
+
+        return tangent;
+    }
+
+    getContour(segment: number, t: number): Phaser.Point {
+        let contour: Phaser.Point = new Phaser.Point();
+        if (t < 0 || t > 1) {
+            return contour;
+        }
+
+        // Check if segment exists
+        let start_idx: number = Math.floor(segment) * 3;
+        if (start_idx > this.points.length - 1) {
+            return contour;
+        }
+
+        let p0 = this.points[start_idx];
+        let p1 = this.points[start_idx + 1];
+        let p2 = this.points[start_idx + 2];
+        let p3 = this.points[(start_idx + 3) % this.points.length];
+
+        // P(t) = (1 - t)^3 * P0 + 3t(1-t)^2 * P1 + 3t^2 (1-t) * P2 + t^3 * P3
+        contour.x = Math.pow(1 - t, 3) * p0.x + 3 * t * Math.pow(1 - t, 2) * p1.x + 3 * Math.pow(t, 2) * (1 - t) * p2.x + Math.pow(t, 3) * p3.x;
+        contour.y = Math.pow(1 - t, 3) * p0.y + 3 * t * Math.pow(1 - t, 2) * p1.y + 3 * Math.pow(t, 2) * (1 - t) * p2.y + Math.pow(t, 3) * p3.y;
+
+        return contour;
+    }
+
+    stringify(): string {
+        let content: string;
+        let x: Array<number> = new Array<number>();
+        let y: Array<number> = new Array<number>();
+
+        for (let i = 0; i < this.points.length; ++i) {
+            x.push(this.points[i].x);
+            y.push(this.points[i].y);
+        }
+
+        content = JSON.stringify([x, y]);
+
+        return content;
     }
 }

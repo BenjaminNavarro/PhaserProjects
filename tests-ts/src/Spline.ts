@@ -21,7 +21,7 @@ class Spline
             this.points[p] = pt;
         }
     }
-	
+
 	create()
 	{
         for (var p = 0; p < this.points.length; p++)
